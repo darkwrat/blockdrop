@@ -1,0 +1,10 @@
+[package]
+name = "blockdrop"
+version = "0.1.0"
+authors = ["Maxim Galaganov <m.galaganov@corp.mail.ru>"]
+edition = "2018"
+
+[dependencies]
+sdl2 = "0.33.0"
+tokio = { version = "0.2", features = ["full"] }
+bitvec = "0.17.4"
