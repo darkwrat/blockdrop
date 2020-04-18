@@ -228,7 +228,10 @@ async fn main() {
 
         let mut r_shape = shape.r_mod(rvel);
         rvel = 0;
-        if r_shape.x >= 0 && r_shape.x + r_shape.w() <= well.w {
+        if r_shape.x + r_shape.w() > well.w {
+            r_shape.x = well.w - r_shape.w();
+        }
+        if r_shape.x >= 0 {
             if r_shape.y >= 0 && r_shape.y + r_shape.h() <= well.h {
                 if !well.collides(&r_shape) {
                     shape = r_shape;
