@@ -26,6 +26,22 @@ impl Shape {
         Shape { x, y, k, r: 0 }
     }
 
+    fn w(&self) -> usize {
+        let mut wm = 0;
+        let r = ShapeRotation::from_i32(self.r);
+        for row in self.k.layout(r).iter() {
+            if row.len() > wm {
+                wm = row.len();
+            }
+        }
+        wm
+    }
+
+    fn h(&self) -> usize {
+        let r = ShapeRotation::from_i32(self.r);
+        self.k.layout(r).len()
+    }
+
     fn x_incr(&mut self) {
         self.x += 1
     }
@@ -42,12 +58,24 @@ impl Shape {
         self.y -= 1
     }
 
-    fn r_incr(&mut self) {
-        self.r = (self.r + 1) % 4
+    fn r_incr(&mut self, w: usize, h: usize) {
+        self.r = (self.r + 1) % 4;
+        if self.x + self.w() > w {
+            self.x = w - self.w()
+        }
+        if self.y + self.h() > h {
+            self.y = h - self.h()
+        }
     }
 
-    fn r_decr(&mut self) {
-        self.r = (self.r - 1) % 4
+    fn r_decr(&mut self, w: usize, h: usize) {
+        self.r = (self.r - 1) % 4;
+        if self.x + self.w() > w {
+            self.x = w - self.w()
+        }
+        if self.y + self.h() > h {
+            self.y = h - self.h()
+        }
     }
 
     fn layout(&self) -> &[&[i8]] {
@@ -80,7 +108,7 @@ impl Well {
     }
 
     fn gen_shape(&self) -> Shape {
-        Shape::new(self.w / 2 - 2, 0, ShapeKind::random())
+        Shape::new(self.w / 2, 0, ShapeKind::random())
     }
 
     fn consume(&mut self, s: &Shape) {
@@ -147,7 +175,7 @@ async fn main() {
                     }
                 }
                 Event::KeyDown { keycode: Some(Keycode::D), .. } => {
-                    if shape.x < well.w - 1 {
+                    if shape.x + shape.w() < well.w {
                         shape.x_incr()
                     }
                 }
@@ -157,12 +185,16 @@ async fn main() {
                     }
                 }
                 Event::KeyDown { keycode: Some(Keycode::S), .. } => {
-                    if shape.y < well.h - 1 {
+                    if shape.y + shape.h() < well.h {
                         shape.y_incr()
                     }
                 }
-                Event::KeyDown { keycode: Some(Keycode::Q), .. } => { shape.r_decr() }
-                Event::KeyDown { keycode: Some(Keycode::E), .. } => { shape.r_incr() }
+                Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
+                    shape.r_decr(well.w, well.h);
+                }
+                Event::KeyDown { keycode: Some(Keycode::E), .. } => {
+                    shape.r_incr(well.w, well.h);
+                }
 
                 Event::KeyDown { keycode: Some(Keycode::Space), .. } => {
                     well.consume(&shape);
@@ -369,8 +401,8 @@ impl ShapeKind {
                     &[1, 0, ],
                 ],
                 ShapeRotation::SIX => &[
-                    &[1, 1, 0, 0],
-                    &[0, 1, 1, 0],
+                    &[1, 1, 0, ],
+                    &[0, 1, 1, ],
                 ],
                 ShapeRotation::NINE => &[
                     &[0, 1, ],
