@@ -2,11 +2,13 @@ use rand::Rng;
 
 use std::thread;
 use std::time::Duration;
+use std::sync::atomic;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 #[derive(Clone)]
 struct Shape {
@@ -80,7 +82,7 @@ struct Well {
 }
 
 impl Well {
-    fn new(mut w: i32, mut h: i32) -> Well {
+    fn new(w: i32, h: i32) -> Well {
         Well { w, h, n: ShapeKind::random(), v: vec![0; w as usize * h as usize] }
     }
 
@@ -156,16 +158,6 @@ impl Well {
     }
 }
 
-struct ColoredRect {
-    r: Rect,
-    c: Color,
-}
-
-impl ColoredRect {
-    // fn new(c: u8, x: i32, y: i32, w: u32, h: u32) -> ColoredRect {
-    // }
-}
-
 fn main() {
     let ctx = sdl2::init().unwrap();
     let vid = ctx.video().unwrap();
@@ -181,8 +173,9 @@ fn main() {
 
     let mut rvel = 0;
     let mut xvel = 0;
-    // let yvel = 1;
-    let yvel = 1;
+
+    let atomic_delay = AtomicU32::new(200/*ms*/);
+    let atomic_yvel = AtomicBool::new(false);
 
     let cell: i32 = 32;
     let wnd = vid.window("blockdrop", (fx + ff + (fw * cell) as i32 + ff + fx) as u32, (fy + ff + (fh * cell) as i32 + ff + fy) as u32)
@@ -195,10 +188,15 @@ fn main() {
     cnv.clear();
     cnv.present();
 
-
     let mut rekts = Vec::with_capacity((well.w * well.h) as usize);
 
     let mut evs = ctx.event_pump().unwrap();
+    let tms = ctx.timer().unwrap();
+    let _tm = tms.add_timer(atomic_delay.load(Ordering::Acquire), Box::new(|| {
+        atomic_yvel.store(true, Ordering::Release);
+        atomic_delay.load(Ordering::Acquire)
+    }));
+
     'running: loop {
         for ev in evs.poll_iter() {
             match ev {
@@ -210,6 +208,11 @@ fn main() {
 
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => { xvel = -1; }
                 Event::KeyDown { keycode: Some(Keycode::D), .. } => { xvel = 1; }
+
+                Event::KeyDown { keycode: Some(Keycode::Up), .. } => { atomic_delay.fetch_sub(1, Ordering::Release); }
+                Event::KeyDown { keycode: Some(Keycode::Down), .. } => { atomic_delay.fetch_add(1, Ordering::Release); }
+
+                Event::KeyDown { keycode: Some(Keycode::X), .. } => { well.clear() }
 
                 Event::KeyUp { keycode: Some(Keycode::A), .. } => if xvel < 0 { xvel = 0; }
                 Event::KeyUp { keycode: Some(Keycode::D), .. } => if xvel > 0 { xvel = 0; }
@@ -232,11 +235,15 @@ fn main() {
         }
 
         let x_shape = shape.x_mod(xvel);
+        xvel = 0;
         if x_shape.x >= 0 && x_shape.x + x_shape.w() <= well.w {
             if !well.collides(&x_shape) {
                 shape = x_shape;
             }
         }
+
+        let yvel = if atomic_yvel.load(Ordering::Acquire) { 1 } else { 0 };
+        atomic_yvel.store(false, Ordering::Release);
 
         let y_shape = shape.y_mod(yvel);
         if y_shape.y >= 0 {
@@ -299,7 +306,7 @@ fn main() {
         rekts.clear();
 
         cnv.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        thread::sleep(Duration::new(0, 1_000_000_000u32 / 120));
     }
 }
 
@@ -316,12 +323,6 @@ impl ShapeKind {
             4 => ShapeKind::S,
             5 => ShapeKind::T,
             _ => ShapeKind::Z,
-        }
-    }
-
-    fn color(c: u8) -> Color {
-        match c {
-            _ => Color::RGB(0x00, 0x00, 0x77)
         }
     }
 
