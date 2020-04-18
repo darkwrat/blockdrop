@@ -50,6 +50,10 @@ impl Shape {
         self.x -= 1
     }
 
+    fn x_set(&mut self, x: usize) {
+        self.x = x
+    }
+
     fn y_incr(&mut self) {
         self.y += 1
     }
@@ -108,7 +112,9 @@ impl Well {
     }
 
     fn gen_shape(&self) -> Shape {
-        Shape::new(self.w / 2, 0, ShapeKind::random())
+        let mut shape = Shape::new(0, 0, ShapeKind::random());
+        shape.x_set(self.w / 2 - shape.w() / 2);
+        shape
     }
 
     fn consume(&mut self, s: &Shape) {
@@ -159,7 +165,7 @@ async fn main() {
 
     let mut rekts = Vec::with_capacity(well.w * well.h);
 
-    let mut iv = time::interval(Duration::new(0, 1_000_000_000u32 / 30));
+    let mut iv = time::interval(Duration::new(0, 1_000_000_000u32 / 15));
     let mut evs = ctx.event_pump().unwrap();
     'running: loop {
         iv.tick().await;
@@ -179,16 +185,6 @@ async fn main() {
                         shape.x_incr()
                     }
                 }
-                Event::KeyDown { keycode: Some(Keycode::W), .. } => {
-                    if shape.y > 0 {
-                        shape.y_decr()
-                    }
-                }
-                Event::KeyDown { keycode: Some(Keycode::S), .. } => {
-                    if shape.y + shape.h() < well.h {
-                        shape.y_incr()
-                    }
-                }
                 Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
                     shape.r_decr(well.w, well.h);
                 }
@@ -196,13 +192,15 @@ async fn main() {
                     shape.r_incr(well.w, well.h);
                 }
 
-                Event::KeyDown { keycode: Some(Keycode::Space), .. } => {
-                    well.consume(&shape);
-                    shape = well.gen_shape();
-                }
-
                 _ => {}
             }
+        }
+
+        if shape.y + shape.h() < well.h {
+            shape.y_incr()
+        } else {
+            well.consume(&shape);
+            shape = well.gen_shape();
         }
 
         rekts.clear();
