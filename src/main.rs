@@ -24,8 +24,8 @@ struct Shape {
 }
 
 impl Shape {
-    fn new(k: ShapeKind) -> Shape {
-        Shape { x: 0, y: 0, k, r: 0 }
+    fn new(k: &ShapeKind) -> Shape {
+        Shape { x: 0, y: 0, k: k.clone(), r: 0 }
     }
 
     fn pos(&self, x: i32, y: i32) -> Shape {
@@ -82,16 +82,18 @@ impl ShapeRotation {
 struct Well {
     w: i32,
     h: i32,
+    n: ShapeKind,
     v: Vec<u8>,
 }
 
 impl Well {
     fn new(mut w: i32, mut h: i32) -> Well {
-        Well { w, h, v: vec![0; w as usize * h as usize] }
+        Well { w, h, n: ShapeKind::random(), v: vec![0; w as usize * h as usize] }
     }
 
-    fn gen_shape(&self) -> Shape {
-        let s = Shape::new(ShapeKind::random());
+    fn gen_shape(&mut self) -> Shape {
+        let s = Shape::new(&self.n);
+        self.n = ShapeKind::random();
         s.pos(self.w as i32 / 2 - s.w() as i32 / 2, 0)
     }
 
@@ -110,7 +112,32 @@ impl Well {
             }
             y -= 1;
         }
+        while self.eliminate() {}
         self.gen_shape()
+    }
+
+    fn eliminate(&mut self) -> bool {
+        let mut y = self.h - 1;
+        while y >= 0 {
+            let mut c = true;
+            let mut x = self.w - 1;
+            while x >= 0 {
+                if self.v[(self.w * y + x) as usize] == 0 {
+                    c = false;
+                    break;
+                }
+                x -= 1;
+            }
+            if c {
+                let mut tmp = vec![0; self.w as usize];
+                tmp.extend_from_slice(&self.v[..(self.w * y) as usize]);
+                tmp.extend_from_slice(&self.v[(self.w * y + self.w) as usize..]);
+                self.v = tmp;
+                return true;
+            }
+            y -= 1;
+        }
+        false
     }
 
     fn collides(&self, s: &Shape) -> bool {
@@ -175,7 +202,8 @@ async fn main() {
 
     let mut rekts = Vec::with_capacity((well.w * well.h) as usize);
 
-    let mut iv = time::interval(Duration::new(0, 1_000_000_000u32 / 24));
+    let mut iv = time::interval(Duration::new(0, 1_000_000_000u32 / 10));
+
     let mut evs = ctx.event_pump().unwrap();
     'running: loop {
         iv.tick().await;
