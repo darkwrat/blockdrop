@@ -3,17 +3,10 @@ use rand::Rng;
 use std::thread;
 use std::time::Duration;
 
-use bitvec::prelude::*;
-
-use tokio::prelude::*;
-use tokio::time::{self};
-
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use bitvec::slice::ChunksExact;
-use std::fs::read_to_string;
 
 #[derive(Clone)]
 struct Shape {
@@ -173,13 +166,15 @@ impl ColoredRect {
     // }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let ctx = sdl2::init().unwrap();
     let vid = ctx.video().unwrap();
 
     let fw: i32 = 10;
     let fh: i32 = 22;
+    let fx: i32 = 10;
+    let fy: i32 = 10;
+    let ff: i32 = 5;
 
     let mut well = Well::new(fw, fh);
     let mut shape = well.gen_shape();
@@ -190,7 +185,7 @@ async fn main() {
     let yvel = 1;
 
     let cell: i32 = 32;
-    let wnd = vid.window("blockdrop", (cell * well.w) as u32, (cell * well.h) as u32)
+    let wnd = vid.window("blockdrop", (fx + ff + (fw * cell) as i32 + ff + fx) as u32, (fy + ff + (fh * cell) as i32 + ff + fy) as u32)
         .position_centered()
         .build()
         .unwrap();
@@ -200,14 +195,11 @@ async fn main() {
     cnv.clear();
     cnv.present();
 
-    let mut rekts = Vec::with_capacity((well.w * well.h) as usize);
 
-    let mut iv = time::interval(Duration::new(0, 1_000_000_000u32 / 10));
+    let mut rekts = Vec::with_capacity((well.w * well.h) as usize);
 
     let mut evs = ctx.event_pump().unwrap();
     'running: loop {
-        iv.tick().await;
-
         for ev in evs.poll_iter() {
             match ev {
                 Event::Quit { .. } |
@@ -262,11 +254,15 @@ async fn main() {
         cnv.set_draw_color(Color::RGB(0xFF, 0xFF, 0xFF));
         cnv.clear();
 
+        let fm = Rect::new(fx, fy, (cell * well.w + ff + ff) as u32, (cell * well.h + ff + ff) as u32);
+        cnv.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
+        cnv.draw_rect(fm);
+
         let mut i = 0;
         for c in &well.v {
             if *c != 0 {
-                let x: i32 = cell * (i % well.w);
-                let y: i32 = cell * (i / well.w);
+                let x: i32 = fx + ff + cell * (i % well.w);
+                let y: i32 = fy + ff + cell * (i / well.w);
                 let rekt = Rect::new(x, y, cell as u32, cell as u32);
                 rekts.push(rekt);
             }
@@ -286,8 +282,8 @@ async fn main() {
             for col in row.iter() {
                 let c = *col;
                 if c != 0 {
-                    let x: i32 = cell * (shape.x + j);
-                    let y: i32 = cell * (shape.y + i);
+                    let x: i32 = fx + ff + cell * (shape.x + j);
+                    let y: i32 = fy + ff + cell * (shape.y + i);
                     let rekt = Rect::new(x, y, cell as u32, cell as u32);
                     rekts.push(rekt);
                 }
@@ -303,6 +299,7 @@ async fn main() {
         rekts.clear();
 
         cnv.present();
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
@@ -322,11 +319,11 @@ impl ShapeKind {
         }
     }
 
-    // fn color(c: u8) -> Color {
-    //     match c {
-    //         0 => Color::RGB()
-    //     }
-    // }
+    fn color(c: u8) -> Color {
+        match c {
+            _ => Color::RGB(0x00, 0x00, 0x77)
+        }
+    }
 
     fn layout(&self, rot: ShapeRotation) -> &[&[u8]] {
         match self {

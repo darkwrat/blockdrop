@@ -7,5 +7,3 @@ edition = "2018"
 [dependencies]
 rand = "0.7"
 sdl2 = "0.33.0"
-tokio = { version = "0.2", features = ["full"] }
-bitvec = "0.17.4"
