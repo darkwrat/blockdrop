@@ -13,89 +13,55 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use bitvec::slice::ChunksExact;
+use std::fs::read_to_string;
 
+#[derive(Clone)]
 struct Shape {
-    x: usize,
-    y: usize,
+    x: i32,
+    y: i32,
     k: ShapeKind,
     r: i32,
 }
 
 impl Shape {
-    fn new(x: usize, y: usize, k: ShapeKind) -> Shape {
-        Shape { x, y, k, r: 0 }
+    fn new(k: ShapeKind) -> Shape {
+        Shape { x: 0, y: 0, k, r: 0 }
     }
 
-    fn w(&self) -> usize {
-        let mut wm = 0;
-        let r = ShapeRotation::from_i32(self.r);
-        for row in self.k.layout(r).iter() {
-            if row.len() > wm {
-                wm = row.len();
-            }
-        }
-        wm
+    fn pos(&self, x: i32, y: i32) -> Shape {
+        let mut s = self.clone();
+        s.x = x;
+        s.y = y;
+        s
     }
 
-    fn h(&self) -> usize {
-        let r = ShapeRotation::from_i32(self.r);
-        self.k.layout(r).len()
+    fn w(&self) -> i32 {
+        self.layout()[0].len() as i32
     }
 
-    fn x_incr(&mut self, well_w: usize) -> usize {
-        if self.x + self.w() < well_w {
-            self.x += 1
-        }
-        self.x
+    fn h(&self) -> i32 {
+        self.layout().len() as i32
     }
 
-    fn x_decr(&mut self) -> usize {
-        if self.x > 0 {
-            self.x -= 1
-        }
-        self.x
+    fn x_mod(&self, xvel: i32) -> Shape {
+        let mut s = self.clone();
+        s.x = self.x + xvel;
+        s
     }
 
-    fn x_set(&mut self, x: usize) -> usize {
-        self.x = x;
-        self.x
+    fn y_mod(&self, yvel: i32) -> Shape {
+        let mut s = self.clone();
+        s.y = self.y + yvel;
+        s
     }
 
-    fn y_incr(&mut self, well_h: usize) -> usize {
-        if self.y + self.h() < well_h {
-            self.y += 1
-        }
-        self.y
+    fn r_mod(&self, rvel: i32) -> Shape {
+        let mut s = self.clone();
+        s.r = self.r + rvel;
+        s
     }
 
-    fn y_decr(&mut self) -> usize {
-        if self.y > 0 {
-            self.y -= 1
-        }
-        self.y
-    }
-
-    fn r_incr(&mut self, well_w: usize, well_h: usize) {
-        self.r = (self.r + 1) % 4;
-        if self.x + self.w() > well_w {
-            self.x = well_w - self.w()
-        }
-        if self.y + self.h() > well_h {
-            self.y = well_h - self.h()
-        }
-    }
-
-    fn r_decr(&mut self, well_w: usize, well_h: usize) {
-        self.r = (self.r - 1) % 4;
-        if self.x + self.w() > well_w {
-            self.x = well_w - self.w()
-        }
-        if self.y + self.h() > well_h {
-            self.y = well_h - self.h()
-        }
-    }
-
-    fn layout(&self) -> &[&[i8]] {
+    fn layout(&self) -> &[&[u8]] {
         self.k.layout(ShapeRotation::from_i32(self.r))
     }
 }
@@ -114,41 +80,59 @@ impl ShapeRotation {
 }
 
 struct Well {
-    w: usize,
-    h: usize,
-    v: BitVec<Msb0, u64>,
+    w: i32,
+    h: i32,
+    v: Vec<u8>,
 }
 
 impl Well {
-    fn new(w: usize, h: usize) -> Well {
-        Well { w, h, v: bitvec![Msb0, u64; 0; w*h] }
+    fn new(mut w: i32, mut h: i32) -> Well {
+        Well { w, h, v: vec![0; w as usize * h as usize] }
     }
 
     fn gen_shape(&self) -> Shape {
-        let mut shape = Shape::new(0, 0, ShapeKind::random());
-        let _ = shape.x_set(self.w / 2 - shape.w() / 2);
-        shape
+        let s = Shape::new(ShapeKind::random());
+        s.pos(self.w as i32 / 2 - s.w() as i32 / 2, 0)
     }
 
-    fn consume(&mut self, s: &Shape) {
-        let mut v = bitvec![Msb0, u64; 0; self.w*s.y];
-        let rows = s.layout();
-        for row in rows.iter() {
-            v.resize(v.len() + s.x, false);
-            v.extend(row.iter().map(|x| (*x != 0)));
-            v.resize(v.len() + self.w - s.x - row.len(), false);
+    fn consume(&mut self, s: Shape) -> Shape {
+        let lo = s.layout();
+        let mut y = s.h() - 1;
+        while y >= 0 {
+            let mut x = s.w() - 1;
+            while x >= 0 {
+                let s_c = lo[y as usize][x as usize];
+                let w_c = &mut self.v[(self.w * (s.y + y) + s.x + x) as usize];
+                if s_c != 0 {
+                    *w_c = s_c;
+                }
+                x -= 1;
+            }
+            y -= 1;
         }
-        v.resize(self.v.len(), false);
-        self.v |= v;
+        self.gen_shape()
     }
 
-    fn rows(&self) -> ChunksExact<Msb0, u64> {
-        self.v.chunks_exact(self.w)
+    fn collides(&self, s: &Shape) -> bool {
+        let lo = s.layout();
+        let mut y = s.h() - 1;
+        while y >= 0 {
+            let mut x = s.w() - 1;
+            while x >= 0 {
+                let s_c = lo[y as usize][x as usize];
+                let w_c = self.v[(self.w * (s.y + y) + s.x + x) as usize];
+                if s_c != 0 && w_c != 0 {
+                    return true;
+                }
+                x -= 1;
+            }
+            y -= 1;
+        }
+        false
     }
 
     fn clear(&mut self) {
-        self.v.clear();
-        self.v.resize(self.w * self.h, false);
+        self.v = vec![0; self.w as usize * self.h as usize]
     }
 }
 
@@ -167,16 +151,19 @@ async fn main() {
     let ctx = sdl2::init().unwrap();
     let vid = ctx.video().unwrap();
 
-    let fw: usize = 10;
-    let fh: usize = 22;
+    let fw: i32 = 10;
+    let fh: i32 = 22;
 
     let mut well = Well::new(fw, fh);
     let mut shape = well.gen_shape();
 
-    let cell = 32;
-    let ww = cell * well.w;
-    let wh = cell * well.h;
-    let wnd = vid.window("blockdrop", ww as u32, wh as u32)
+    let mut rvel = 0;
+    let mut xvel = 0;
+    // let yvel = 1;
+    let yvel = 1;
+
+    let cell: i32 = 32;
+    let wnd = vid.window("blockdrop", (cell * well.w) as u32, (cell * well.h) as u32)
         .position_centered()
         .build()
         .unwrap();
@@ -186,9 +173,9 @@ async fn main() {
     cnv.clear();
     cnv.present();
 
-    let mut rekts = Vec::with_capacity(well.w * well.h);
+    let mut rekts = Vec::with_capacity((well.w * well.h) as usize);
 
-    let mut iv = time::interval(Duration::new(0, 1_000_000_000u32 / 15));
+    let mut iv = time::interval(Duration::new(0, 1_000_000_000u32 / 24));
     let mut evs = ctx.event_pump().unwrap();
     'running: loop {
         iv.tick().await;
@@ -198,18 +185,46 @@ async fn main() {
                 Event::Quit { .. } |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => { break 'running; }
 
-                Event::KeyDown { keycode: Some(Keycode::A), .. } => { let _ = shape.x_decr(); }
-                Event::KeyDown { keycode: Some(Keycode::D), .. } => { let _ = shape.x_incr(well.w); }
-                Event::KeyDown { keycode: Some(Keycode::Q), .. } => { shape.r_decr(well.w, well.h); }
-                Event::KeyDown { keycode: Some(Keycode::E), .. } => { shape.r_incr(well.w, well.h); }
+                Event::KeyDown { keycode: Some(Keycode::Q), .. } => { rvel = -1; }
+                Event::KeyDown { keycode: Some(Keycode::E), .. } => { rvel = 1; }
+
+                Event::KeyDown { keycode: Some(Keycode::A), .. } => { xvel = -1; }
+                Event::KeyDown { keycode: Some(Keycode::D), .. } => { xvel = 1; }
+
+                Event::KeyUp { keycode: Some(Keycode::A), .. } => if xvel < 0 { xvel = 0; }
+                Event::KeyUp { keycode: Some(Keycode::D), .. } => if xvel > 0 { xvel = 0; }
 
                 _ => {}
             }
         }
 
-        if shape.y == shape.y_incr(well.h) {
-            well.consume(&shape);
-            shape = well.gen_shape();
+        let mut r_shape = shape.r_mod(rvel);
+        rvel = 0;
+        if r_shape.x >= 0 && r_shape.x + r_shape.w() <= well.w {
+            if r_shape.y >= 0 && r_shape.y + r_shape.h() <= well.h {
+                if !well.collides(&r_shape) {
+                    shape = r_shape;
+                }
+            }
+        }
+
+        let x_shape = shape.x_mod(xvel);
+        if x_shape.x >= 0 && x_shape.x + x_shape.w() <= well.w {
+            if !well.collides(&x_shape) {
+                shape = x_shape;
+            }
+        }
+
+        let y_shape = shape.y_mod(yvel);
+        if y_shape.y >= 0 {
+            if shape.y + shape.h() < well.h && !well.collides(&y_shape) {
+                shape = y_shape;
+            } else {
+                shape = well.consume(shape);
+                if well.collides(&shape) {
+                    well.clear()
+                }
+            }
         }
 
         rekts.clear();
@@ -217,16 +232,12 @@ async fn main() {
         cnv.clear();
 
         let mut i = 0;
-        for row in well.rows() {
-            let mut j = 0;
-            for col in row {
-                if *col {
-                    let x: i32 = (cell * j) as i32;
-                    let y: i32 = (cell * i) as i32;
-                    let rekt = Rect::new(x, y, cell as u32, cell as u32);
-                    rekts.push(rekt);
-                }
-                j += 1;
+        for c in &well.v {
+            if *c != 0 {
+                let x: i32 = cell * (i % well.w);
+                let y: i32 = cell * (i / well.w);
+                let rekt = Rect::new(x, y, cell as u32, cell as u32);
+                rekts.push(rekt);
             }
             i += 1;
         }
@@ -237,14 +248,15 @@ async fn main() {
         cnv.draw_rects(&rekts);
         rekts.clear();
 
+
         let mut i = 0;
         for row in shape.layout().iter() {
             let mut j = 0;
             for col in row.iter() {
                 let c = *col;
                 if c != 0 {
-                    let x: i32 = (cell * (shape.x + j)) as i32;
-                    let y: i32 = (cell * (shape.y + i)) as i32;
+                    let x: i32 = cell * (shape.x + j);
+                    let y: i32 = cell * (shape.y + i);
                     let rekt = Rect::new(x, y, cell as u32, cell as u32);
                     rekts.push(rekt);
                 }
@@ -263,6 +275,7 @@ async fn main() {
     }
 }
 
+#[derive(Clone)]
 enum ShapeKind { I, J, L, O, S, T, Z }
 
 impl ShapeKind {
@@ -284,7 +297,7 @@ impl ShapeKind {
     //     }
     // }
 
-    fn layout(&self, rot: ShapeRotation) -> &[&[i8]] {
+    fn layout(&self, rot: ShapeRotation) -> &[&[u8]] {
         match self {
             ShapeKind::I => match rot {
                 ShapeRotation::TWELVE => &[
