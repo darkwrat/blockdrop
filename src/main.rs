@@ -42,43 +42,56 @@ impl Shape {
         self.k.layout(r).len()
     }
 
-    fn x_incr(&mut self) {
-        self.x += 1
+    fn x_incr(&mut self, well_w: usize) -> usize {
+        if self.x + self.w() < well_w {
+            self.x += 1
+        }
+        self.x
     }
 
-    fn x_decr(&mut self) {
-        self.x -= 1
+    fn x_decr(&mut self) -> usize {
+        if self.x > 0 {
+            self.x -= 1
+        }
+        self.x
     }
 
-    fn x_set(&mut self, x: usize) {
-        self.x = x
+    fn x_set(&mut self, x: usize) -> usize {
+        self.x = x;
+        self.x
     }
 
-    fn y_incr(&mut self) {
-        self.y += 1
+    fn y_incr(&mut self, well_h: usize) -> usize {
+        if self.y + self.h() < well_h {
+            self.y += 1
+        }
+        self.y
     }
 
-    fn y_decr(&mut self) {
-        self.y -= 1
+    fn y_decr(&mut self) -> usize {
+        if self.y > 0 {
+            self.y -= 1
+        }
+        self.y
     }
 
-    fn r_incr(&mut self, w: usize, h: usize) {
+    fn r_incr(&mut self, well_w: usize, well_h: usize) {
         self.r = (self.r + 1) % 4;
-        if self.x + self.w() > w {
-            self.x = w - self.w()
+        if self.x + self.w() > well_w {
+            self.x = well_w - self.w()
         }
-        if self.y + self.h() > h {
-            self.y = h - self.h()
+        if self.y + self.h() > well_h {
+            self.y = well_h - self.h()
         }
     }
 
-    fn r_decr(&mut self, w: usize, h: usize) {
+    fn r_decr(&mut self, well_w: usize, well_h: usize) {
         self.r = (self.r - 1) % 4;
-        if self.x + self.w() > w {
-            self.x = w - self.w()
+        if self.x + self.w() > well_w {
+            self.x = well_w - self.w()
         }
-        if self.y + self.h() > h {
-            self.y = h - self.h()
+        if self.y + self.h() > well_h {
+            self.y = well_h - self.h()
         }
     }
 
@@ -113,7 +126,7 @@ impl Well {
 
     fn gen_shape(&self) -> Shape {
         let mut shape = Shape::new(0, 0, ShapeKind::random());
-        shape.x_set(self.w / 2 - shape.w() / 2);
+        let _ = shape.x_set(self.w / 2 - shape.w() / 2);
         shape
     }
 
@@ -137,6 +150,16 @@ impl Well {
         self.v.clear();
         self.v.resize(self.w * self.h, false);
     }
+}
+
+struct ColoredRect {
+    r: Rect,
+    c: Color,
+}
+
+impl ColoredRect {
+    // fn new(c: u8, x: i32, y: i32, w: u32, h: u32) -> ColoredRect {
+    // }
 }
 
 #[tokio::main]
@@ -175,30 +198,16 @@ async fn main() {
                 Event::Quit { .. } |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => { break 'running; }
 
-                Event::KeyDown { keycode: Some(Keycode::A), .. } => {
-                    if shape.x > 0 {
-                        shape.x_decr()
-                    }
-                }
-                Event::KeyDown { keycode: Some(Keycode::D), .. } => {
-                    if shape.x + shape.w() < well.w {
-                        shape.x_incr()
-                    }
-                }
-                Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
-                    shape.r_decr(well.w, well.h);
-                }
-                Event::KeyDown { keycode: Some(Keycode::E), .. } => {
-                    shape.r_incr(well.w, well.h);
-                }
+                Event::KeyDown { keycode: Some(Keycode::A), .. } => { let _ = shape.x_decr(); }
+                Event::KeyDown { keycode: Some(Keycode::D), .. } => { let _ = shape.x_incr(well.w); }
+                Event::KeyDown { keycode: Some(Keycode::Q), .. } => { shape.r_decr(well.w, well.h); }
+                Event::KeyDown { keycode: Some(Keycode::E), .. } => { shape.r_incr(well.w, well.h); }
 
                 _ => {}
             }
         }
 
-        if shape.y + shape.h() < well.h {
-            shape.y_incr()
-        } else {
+        if shape.y == shape.y_incr(well.h) {
             well.consume(&shape);
             shape = well.gen_shape();
         }
@@ -224,7 +233,7 @@ async fn main() {
 
         cnv.set_draw_color(Color::RGB(0x77, 0x00, 0x00));
         cnv.fill_rects(&rekts);
-        cnv.set_draw_color(Color::RGB(0x33, 0x00, 0x00));
+        cnv.set_draw_color(Color::RGB(0xFF, 0xFF, 0xFF));
         cnv.draw_rects(&rekts);
         rekts.clear();
 
@@ -232,7 +241,8 @@ async fn main() {
         for row in shape.layout().iter() {
             let mut j = 0;
             for col in row.iter() {
-                if *col != 0 {
+                let c = *col;
+                if c != 0 {
                     let x: i32 = (cell * (shape.x + j)) as i32;
                     let y: i32 = (cell * (shape.y + i)) as i32;
                     let rekt = Rect::new(x, y, cell as u32, cell as u32);
@@ -245,7 +255,7 @@ async fn main() {
 
         cnv.set_draw_color(Color::RGB(0x00, 0x00, 0x77));
         cnv.fill_rects(&rekts);
-        cnv.set_draw_color(Color::RGB(0x00, 0x00, 0x33));
+        cnv.set_draw_color(Color::RGB(0xFF, 0xFF, 0xFF));
         cnv.draw_rects(&rekts);
         rekts.clear();
 
@@ -267,6 +277,12 @@ impl ShapeKind {
             _ => ShapeKind::Z,
         }
     }
+
+    // fn color(c: u8) -> Color {
+    //     match c {
+    //         0 => Color::RGB()
+    //     }
+    // }
 
     fn layout(&self, rot: ShapeRotation) -> &[&[i8]] {
         match self {
@@ -292,120 +308,120 @@ impl ShapeKind {
             },
             ShapeKind::J => match rot {
                 ShapeRotation::TWELVE => &[
-                    &[0, 1, ],
-                    &[0, 1, ],
-                    &[1, 1, ],
+                    &[0, 2, ],
+                    &[0, 2, ],
+                    &[2, 2, ],
                 ],
                 ShapeRotation::THREE => &[
-                    &[1, 0, 0, ],
-                    &[1, 1, 1, ],
+                    &[2, 0, 0, ],
+                    &[2, 2, 2, ],
                 ],
                 ShapeRotation::SIX => &[
-                    &[1, 1, ],
-                    &[1, 0, ],
-                    &[1, 0, ],
+                    &[2, 2, ],
+                    &[2, 0, ],
+                    &[2, 0, ],
                 ],
                 ShapeRotation::NINE => &[
-                    &[1, 1, 1, ],
-                    &[0, 0, 1, ],
+                    &[2, 2, 2, ],
+                    &[0, 0, 2, ],
                 ],
             }
             ShapeKind::L => match rot {
                 ShapeRotation::TWELVE => &[
-                    &[1, 0, ],
-                    &[1, 0, ],
-                    &[1, 1, ],
+                    &[3, 0, ],
+                    &[3, 0, ],
+                    &[3, 3, ],
                 ],
                 ShapeRotation::THREE => &[
-                    &[1, 1, 1, ],
-                    &[1, 0, 0, ],
+                    &[3, 3, 3, ],
+                    &[3, 0, 0, ],
                 ],
                 ShapeRotation::SIX => &[
-                    &[1, 1, ],
-                    &[0, 1, ],
-                    &[0, 1, ],
+                    &[3, 3, ],
+                    &[0, 3, ],
+                    &[0, 3, ],
                 ],
                 ShapeRotation::NINE => &[
-                    &[0, 0, 1, ],
-                    &[1, 1, 1, ],
+                    &[0, 0, 3, ],
+                    &[3, 3, 3, ],
                 ],
             },
             ShapeKind::O => match rot {
                 ShapeRotation::TWELVE => &[
-                    &[1, 1, ],
-                    &[1, 1, ],
+                    &[4, 4, ],
+                    &[4, 4, ],
                 ],
                 ShapeRotation::THREE => &[
-                    &[1, 1, ],
-                    &[1, 1, ],
+                    &[4, 4, ],
+                    &[4, 4, ],
                 ],
                 ShapeRotation::SIX => &[
-                    &[1, 1, ],
-                    &[1, 1, ],
+                    &[4, 4, ],
+                    &[4, 4, ],
                 ],
                 ShapeRotation::NINE => &[
-                    &[1, 1, ],
-                    &[1, 1, ],
+                    &[4, 4, ],
+                    &[4, 4, ],
                 ],
             },
             ShapeKind::S => match rot {
                 ShapeRotation::TWELVE => &[
-                    &[0, 1, 1, ],
-                    &[1, 1, 0, ],
+                    &[0, 5, 5, ],
+                    &[5, 5, 0, ],
                 ],
                 ShapeRotation::THREE => &[
-                    &[1, 0, ],
-                    &[1, 1, ],
-                    &[0, 1, ],
+                    &[5, 0, ],
+                    &[5, 5, ],
+                    &[0, 5, ],
                 ],
                 ShapeRotation::SIX => &[
-                    &[0, 1, 1, ],
-                    &[1, 1, 0, ],
+                    &[0, 5, 5, ],
+                    &[5, 5, 0, ],
                 ],
                 ShapeRotation::NINE => &[
-                    &[1, 0, ],
-                    &[1, 1, ],
-                    &[0, 1, ],
+                    &[5, 0, ],
+                    &[5, 5, ],
+                    &[0, 5, ],
                 ],
             },
             ShapeKind::T => match rot {
                 ShapeRotation::TWELVE => &[
-                    &[0, 1, 0, ],
-                    &[1, 1, 1, ],
+                    &[0, 6, 0, ],
+                    &[6, 6, 6, ],
                 ],
                 ShapeRotation::THREE => &[
-                    &[1, 0, ],
-                    &[1, 1, ],
-                    &[1, 0, ],
+                    &[6, 0, ],
+                    &[6, 6, ],
+                    &[6, 0, ],
                 ],
                 ShapeRotation::SIX => &[
-                    &[1, 1, 1, ],
-                    &[0, 1, 0, ],
+                    &[6, 6, 6, ],
+                    &[0, 6, 0, ],
                 ],
                 ShapeRotation::NINE => &[
-                    &[0, 1, ],
-                    &[1, 1, ],
-                    &[0, 1, ],
+                    &[0, 6, ],
+                    &[6, 6, ],
+                    &[0, 6, ],
                 ],
             },
             ShapeKind::Z => match rot {
                 ShapeRotation::TWELVE => &[
-                    &[1, 1, 0, ],
-                    &[0, 1, 1, ],
+                    &[7, 7, 0, ],
+                    &[0, 7, 7, ],
                 ],
                 ShapeRotation::THREE => &[
-                    &[0, 1, ],
-                    &[1, 1, ],
-                    &[1, 0, ],
+                    &[0, 7, ],
+                    &[7, 7, ],
+                    &[7, 0, ],
                 ],
                 ShapeRotation::SIX => &[
-                    &[1, 1, 0, ],
-                    &[0, 1, 1, ],
+                    &[7, 7, 0, ],
+                    &[0, 7, 7, ],
                 ],
                 ShapeRotation::NINE => &[
-                    &[0, 1, ],
-                    &[1, 1, ],
-                    &[1, 0, ],
+                    &[0, 7, ],
+                    &[7, 7, ],
+                    &[7, 0, ],
                 ],
             },
         }
