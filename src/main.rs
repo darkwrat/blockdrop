@@ -276,7 +276,7 @@ fn main() {
             i += 1;
         }
 
-        cnv.set_draw_color(Color::RGB(0x77, 0x00, 0x00));
+        cnv.set_draw_color(Color::RGB(204, 204, 204));
         cnv.fill_rects(&rekts);
         cnv.set_draw_color(Color::RGB(0xFF, 0xFF, 0xFF));
         cnv.draw_rects(&rekts);
@@ -299,10 +299,8 @@ fn main() {
             i += 1;
         }
 
-        cnv.set_draw_color(Color::RGB(0x00, 0x00, 0x77));
+        cnv.set_draw_color(Color::RGB(239, 32, 41));
         cnv.fill_rects(&rekts);
-        cnv.set_draw_color(Color::RGB(0xFF, 0xFF, 0xFF));
-        cnv.draw_rects(&rekts);
         rekts.clear();
 
         cnv.present();
