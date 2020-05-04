@@ -198,6 +198,8 @@ fn main() {
     }));
 
     'running: loop {
+        let mut drop = false;
+
         for ev in evs.poll_iter() {
             match ev {
                 Event::Quit { .. } |
@@ -209,8 +211,10 @@ fn main() {
                 Event::KeyDown { keycode: Some(Keycode::A), .. } => { xvel = -1; }
                 Event::KeyDown { keycode: Some(Keycode::D), .. } => { xvel = 1; }
 
-                Event::KeyDown { keycode: Some(Keycode::Up), .. } => { atomic_delay.fetch_sub(1, Ordering::Release); }
-                Event::KeyDown { keycode: Some(Keycode::Down), .. } => { atomic_delay.fetch_add(1, Ordering::Release); }
+                Event::KeyDown { keycode: Some(Keycode::S), .. } => { drop = true; }
+
+                // Event::KeyDown { keycode: Some(Keycode::Up), .. } => { atomic_delay.fetch_sub(1, Ordering::Release); }
+                // Event::KeyDown { keycode: Some(Keycode::Down), .. } => { atomic_delay.fetch_add(1, Ordering::Release); }
 
                 Event::KeyDown { keycode: Some(Keycode::X), .. } => { well.clear() }
 
@@ -242,18 +246,27 @@ fn main() {
             }
         }
 
-        let yvel = if atomic_yvel.load(Ordering::Acquire) { 1 } else { 0 };
+        let mut yvel = if atomic_yvel.load(Ordering::Acquire) { 1 } else { 0 };
         atomic_yvel.store(false, Ordering::Release);
 
-        let y_shape = shape.y_mod(yvel);
-        if y_shape.y >= 0 {
-            if shape.y + shape.h() < well.h && !well.collides(&y_shape) {
-                shape = y_shape;
-            } else {
-                shape = well.consume(shape);
-                if well.collides(&shape) {
-                    well.clear()
+        loop {
+            let y_shape = shape.y_mod(yvel);
+            if y_shape.y >= 0 {
+                if shape.y + shape.h() < well.h && !well.collides(&y_shape) {
+                    shape = y_shape;
+                } else {
+                    shape = well.consume(shape);
+                    if well.collides(&shape) {
+                        well.clear()
+                    }
+                    break;
                 }
+            }
+
+            if drop {
+                yvel = 1;
+            } else {
+                break;
             }
         }
 
